@@ -184,6 +184,10 @@ func assembleBuildContainers(mc *MoldConfig) ([]*ContainerConfig, error) {
 		cc.Container.ExposedPorts = exposedPorts
 		cc.Host.PortBindings = portBindings
 
+		uid := strconv.Itoa(os.Getuid())
+		gid := strconv.Itoa(os.Getgid())
+		cc.Container.User = fmt.Sprintf("%s:%s", uid, gid)
+
 		cc.Container.Volumes = map[string]struct{}{b.Workdir: struct{}{}}
 		cc.Container.Cmd = []string{b.Shell, "-cex", b.BuildCmds()}
 
