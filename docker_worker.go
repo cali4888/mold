@@ -615,7 +615,7 @@ func (dw *DockerWorker) watchBuild() {
 						return
 					}
 				} else if c := dw.serviceStates.Get(msg.Actor.ID); c != nil {
-					dw.log.Write([]byte(fmt.Sprintf("WARN [service/%s...] stopped\n", c.Name)))
+					dw.log.Write([]byte(fmt.Sprintf("[service/%s...] [WARN] stopped\n", c.Name)))
 				}
 			}
 
