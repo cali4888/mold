@@ -614,6 +614,8 @@ func (dw *DockerWorker) watchBuild() {
 					if dw.markContainerDone(msg.Actor.ID, status, &state) {
 						return
 					}
+				} else if c := dw.serviceStates.Get(msg.Actor.ID); c != nil {
+					dw.log.Write([]byte(fmt.Sprintf("WARN [service/%s...] stopped\n", c.Name)))
 				}
 			}
 
