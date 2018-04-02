@@ -39,6 +39,8 @@ type DockerWorker struct {
 	abort   chan bool // cancelled channel
 	aborted bool      // whether the worker has begun shutdown
 
+	stopServiceWatcher chan bool // when need to stop service watcher
+
 	log *Log
 	// Auth config for registry operations
 	authCfg *DockerAuthConfig
@@ -47,7 +49,12 @@ type DockerWorker struct {
 // NewDockerWorker instantiates a new worker. If no client is provided and env.
 // based client is used.
 func NewDockerWorker(dcli *Docker) (d *DockerWorker, err error) {
-	d = &DockerWorker{docker: dcli, log: &Log{Writer: os.Stdout}, abort: make(chan bool, 1)}
+	d = &DockerWorker{
+		docker:             dcli,
+		log:                &Log{Writer: os.Stdout},
+		abort:              make(chan bool, 1),
+		stopServiceWatcher: make(chan bool, 1),
+	}
 	// set up registry auth. pushes will not happen if failed
 	if d.authCfg, err = readDockerAuthConfig(""); err != nil {
 		log.Println("WRN", err)
@@ -393,6 +400,8 @@ func (dw *DockerWorker) Build() error {
 		}
 	}
 
+	dw.stopServiceWatcher <- true
+
 	return err
 }
 
@@ -424,6 +433,8 @@ func (dw *DockerWorker) Setup() error {
 		// network exists - so move on.
 	}
 	dw.log.Write([]byte(fmt.Sprintf("[configure/network/%s] Created %s\n", dw.buildConfig.Name(), dw.netID)))
+
+	go dw.watchServices()
 
 	// Start service containers
 	for _, cs := range dw.serviceStates {
@@ -614,14 +625,34 @@ func (dw *DockerWorker) watchBuild() {
 					if dw.markContainerDone(msg.Actor.ID, status, &state) {
 						return
 					}
-				} else if c := dw.serviceStates.Get(msg.Actor.ID); c != nil {
-					dw.log.Write([]byte(fmt.Sprintf("[service/%s...] [WARN] stopped\n", c.Name)))
 				}
 			}
 
 		case err := <-errCh:
 			log.Println("ERR", err)
 
+		}
+	}
+}
+
+func (dw *DockerWorker) watchServices() {
+	cli := dw.docker.Client()
+	msgCh, errCh := cli.Events(context.Background(), types.EventsOptions{})
+	for {
+		select {
+		case <-dw.stopServiceWatcher:
+			log.Println("[DEBUG] service watcher stopped")
+			return
+		case msg := <-msgCh:
+			switch msg.Action {
+			case "die", "kill", "stop, destroy":
+				// Check if we are interested in this container
+				if c := dw.serviceStates.Get(msg.Actor.ID); c != nil {
+					dw.log.Write([]byte(fmt.Sprintf("[service/%s...] [WARN] %s\n", c.Name, msg.Action)))
+				}
+			}
+		case err := <-errCh:
+			log.Println("ERR", err)
 		}
 	}
 }
