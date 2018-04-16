@@ -645,7 +645,7 @@ func (dw *DockerWorker) watchServices() {
 			return
 		case msg := <-msgCh:
 			switch msg.Action {
-			case "die", "kill", "stop, destroy":
+			case "die", "kill", "stop", "destroy":
 				// Check if we are interested in this container
 				if c := dw.serviceStates.Get(msg.Actor.ID); c != nil {
 					dw.log.Write([]byte(fmt.Sprintf("[service/%s...] [WARN] %s\n", c.Name, msg.Action)))
