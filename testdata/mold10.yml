@@ -1,0 +1,8 @@
+services:
+    - image: elasticsearch
+      name: mold.warn.test
+build:
+    - image: alpine:3.5
+      workdir: /go/src/github.com/d3sw/mold
+      commands:
+          - sleep 10

@@ -5,6 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"bytes"
+
+	"io/ioutil"
+	"strings"
+
 	"github.com/docker/docker/api/types"
 )
 
@@ -108,6 +113,51 @@ func Test_Worker_GeneratesArtifacts_Abort(t *testing.T) {
 	<-time.After(1500 * time.Millisecond)
 	if err := worker.Abort(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func Test_ServiceWatcher(t *testing.T) {
+	testMc, worker, _ := initializeBuild("./testdata/mold10.yml", "")
+	worker.Configure(testMc)
+
+	var buf bytes.Buffer
+	worker.log = &Log{Writer: &buf}
+
+	if err := worker.Setup(); err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		time.Sleep(3 * time.Second)
+
+		for _, v := range worker.serviceStates {
+			worker.docker.StopContainer(v.id, 3*time.Second)
+		}
+	}()
+
+	if err := worker.Build(); err != nil {
+		worker.Teardown()
+		t.Fatal(err)
+	}
+
+	if err := worker.Teardown(); err != nil {
+		t.Log(err)
+		t.Fail()
+	}
+
+	bytes, err := ioutil.ReadAll(&buf)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(bytes)
+
+	if !strings.Contains(log, "[service/mold.warn.test...] [WARN] service down before build end. Received signal:") {
+		t.Fatal("Service watcher didn't run")
+	}
+
+	for _, v := range worker.buildStates {
+		t.Log(v.Name, v.Status())
 	}
 }
 
